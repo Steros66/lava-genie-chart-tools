@@ -270,7 +270,7 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
 
 st.set_page_config(page_title="Lava Genie Chart Maker", page_icon="🎸", layout="wide")
 
-st.title("🌋 Lava Genie Chart Maker")
+st.title("🌋 Lava Genie Chart Tool")
 st.markdown("Convert your MusicXML scores (`.xml`, `.mxl`) into perfect *Lava Genie* or *ChordPro* formats.")
 
 uploaded_files = st.file_uploader("Drop your files or an entire folder here", type=["xml", "mxl", "musicxml"], accept_multiple_files=True)
