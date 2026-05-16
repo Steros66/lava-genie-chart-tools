@@ -343,7 +343,6 @@ with tab_xml:
         is_chordpro = (format_choice != "Lava Genie format (.txt)")
 
         if len(uploaded_files) == 1:
-            # SINGLE FILE MODE
             file = uploaded_files[0]
             try:
                 file_bytes = file.read()
@@ -372,7 +371,6 @@ with tab_xml:
                 st.error(f"Error processing {file.name}: {e}")
 
         else:
-            # BATCH MODE
             st.info(f"Batch Mode: {len(uploaded_files)} files ready for conversion.")
             if st.button("Start Bulk Conversion"):
                 zip_buffer = io.BytesIO()
@@ -420,13 +418,50 @@ with tab_text:
         ```
         """)
 
+    # 1. AGGIUNTO: Caricatore di file per file di testo/chordpro esistenti
+    uploaded_text_file = st.file_uploader("Import a text or ChordPro file (.txt, .cho, .chordpro)", type=["txt", "cho", "chordpro"], key="text_file_import")
+    
+    # Valori di default iniziali per i metadati
+    default_name = "My Song"
+    default_artist = "Unknown"
+    default_bpm = "120"
+    default_text = ""
+    
+    # Se viene caricato un file di testo, estraiamo i dati intelligenti
+    if uploaded_text_file is not None:
+        try:
+            default_text = uploaded_text_file.read().decode("utf-8")
+            
+            # Prova a indovinare artista e titolo dal nome del file (es. "Artista - Titolo.txt")
+            filename_clean = uploaded_text_file.name.rsplit('.', 1)[0]
+            if " - " in filename_clean:
+                parts_name = filename_clean.split(" - ", 1)
+                default_artist = parts_name[0].strip()
+                default_name = parts_name[1].strip()
+            else:
+                default_name = filename_clean.strip()
+                
+            # Prova a leggere eventuali tag ChordPro nativi scritti dentro il file
+            title_match = re.search(r'{title:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{t:\s*(.*?)}', default_text, re.IGNORECASE)
+            artist_match = re.search(r'{artist:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{a:\s*(.*?)}', default_text, re.IGNORECASE)
+            tempo_match = re.search(r'{tempo:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{bpm:\s*(.*?)}', default_text, re.IGNORECASE)
+            
+            if title_match: default_name = title_match.group(1).strip()
+            if artist_match: default_artist = artist_match.group(1).strip()
+            if tempo_match: default_bpm = tempo_match.group(1).strip()
+            
+        except Exception as e:
+            st.error(f"Error reading text file: {e}")
+
+    # Campi Metadati
     col_a, col_b, col_c, col_d = st.columns(4)
-    t_name = col_a.text_input("Song Name", "My Song")
-    t_artist = col_b.text_input("Artist", "Unknown")
-    t_bpm = col_c.text_input("BPM", "120")
+    t_name = col_a.text_input("Song Name", default_name)
+    t_artist = col_b.text_input("Artist", default_artist)
+    t_bpm = col_c.text_input("BPM", default_bpm)
     t_def_beat = col_d.number_input("Default Beat", min_value=1, max_value=8, value=4)
 
-    input_text = st.text_area("Paste your Chords & Lyrics here:", height=300, placeholder="C           G,\nMy sample lyrics...")
+    # Area di testo (pre-compilata se l'utente ha caricato un file, altrimenti vuota/manuale)
+    input_text = st.text_area("Chords & Lyrics Content (Paste or edit imported file):", value=default_text, height=300, placeholder="C           G,\nMy sample lyrics...")
 
     if st.button("Convert Text to Lava"):
         if input_text.strip():
@@ -438,8 +473,9 @@ with tab_text:
                 st.subheader("Result (Copy & Paste into Genie Song Editor):")
                 st.text_area("Final Output:", full_output, height=300)
                 
+                # Salvataggio/Download del file generato
                 st.download_button(
-                    label="Download .txt File",
+                    label="Download converted .txt File",
                     data=full_output,
                     file_name=f"{t_name.replace(' ', '_')}_Lava.txt",
                     mime="text/plain"
@@ -447,4 +483,4 @@ with tab_text:
             except Exception as e:
                 st.error(f"An error occurred: {e}")
         else:
-            st.warning("Please paste some text first.")
+            st.warning("Please paste or import some text first.")
