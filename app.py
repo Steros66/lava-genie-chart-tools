@@ -416,6 +416,8 @@ with tab_text:
         * **Chord,** (Comma) = 2 beats
         * **Chord.** (Period) = 1 beat
         
+        > 💡 **PRO TIP FOR ALIGNMENT:** When you add a punctuation mark to a chord, remember to **delete one empty space** immediately after it. This prevents the rest of the chords on that line from shifting one character to the right and losing their perfect alignment with the lyrics!
+        
         *Example:*
         ```text
         C                 G,         F.   C.
