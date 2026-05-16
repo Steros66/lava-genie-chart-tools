@@ -399,23 +399,34 @@ with tab_xml:
 with tab_text:
     st.header("Quick Text-to-Lava Converter")
     
-    with st.expander("❓ How to prepare your text file (Help)"):
+    with st.expander("❓ Help & Instructions: How to prepare your text file"):
         st.markdown("""
-        **The Goal:** Convert a simple 'Chords over Lyrics' text file into Lava Genie format without manual timing adjustments.
+        **Welcome to the Quick Text-to-Lava Converter!** This tool lets you take standard chord sheets from the web and convert them into perfectly timed Lava Genie charts, saving you hours of manual editing inside the app.
+
+        ### 🎹 1. Spacing and Alignment
+        The engine uses "spatial math" to place the chords exactly where they belong.
+        * Write your chords using a **monospaced font** (like Notepad, Courier, or Consolas).
+        * Use the **spacebar** (never the TAB key) to position the chord *exactly* above the word or syllable where the change happens.
+
+        ### ⏱️ 2. Setting Chord Durations (The Punctuation Rule)
+        By default, every chord lasts for your "Default Beat" (usually 4). To change a chord's duration, simply attach a basic punctuation mark directly to the chord name (no spaces):
+        * **Chord** (No symbol) = Default Beat (No editing needed!)
+        * **Chord:** (Colon) = 4 beats
+        * **Chord;** (Semicolon) = 3 beats
+        * **Chord,** (Comma) = 2 beats
+        * **Chord.** (Period) = 1 beat
         
-        **Rules:**
-        1. **Alignment:** Use a fixed-width font (like Notepad) to align chords exactly over the desired syllable.
-        2. **Durations:** Add a symbol directly to the chord ONLY if its duration is different from the Default Beat:
-            * Chord**:** (Colon) = 4 beats
-            * Chord**;** (Semicolon) = 3 beats
-            * Chord**,** (Comma) = 2 beats
-            * Chord**.** (Period) = 1 beat
-            * *Chord (No symbol)* = Default Beat duration
-        3. **Example:**
+        *Example:*
         ```text
-        C                G,        F.   C.
-        This is a sample song line
+        C                 G,         F.   C.
+        This is just a sample lyric line
         ```
+
+        ### 🎸 3. Instrumental Breaks
+        If you write a line of chords with no lyrics underneath (like an intro: `Bm, A, Em`), the tool will automatically format it as an instrumental break. Just make sure to keep chords on one line and lyrics on the next!
+
+        ### 📁 4. ChordPro Import (.cho)
+        You can upload standard ChordPro files using the upload button. If your chords are already written inline (e.g., `[C]Hello [G]world`), the tool will recognize them. You can even apply the punctuation rules inside the brackets to fix the timing (e.g., `[C]Hello [G,]world`).
         """)
 
     # 1. AGGIUNTO: Caricatore di file per file di testo/chordpro esistenti
