@@ -439,7 +439,7 @@ with tab_text:
         * Use the **spacebar** (never the TAB key) to position the chord *exactly* above the word or syllable where the change happens.
 
         ### ⏱️ 2. Setting Chord Durations (The Punctuation Rule)
-        By default, every chord lasts for your "Default Beat" (usually 4). To change a chord's duration, simply attach a basic punctuation mark directly to the chord name (no spaces):
+        By default, every chord lasts for your **Default Beat** (which can be set to 1, 2, 3, 4, or 6 beats). To change a specific chord's duration, simply attach a basic punctuation mark directly to the chord name (no spaces):
         * **Chord** (No symbol) = Default Beat (No editing needed!)
         * **Chord!** (Exclamation) = 6 beats *(Perfect for 6/8 time signatures!)*
         * **Chord:** (Colon) = 4 beats
@@ -462,7 +462,7 @@ with tab_text:
         You can upload standard ChordPro files using the upload button. If your chords are already written inline (e.g., `[C]Hello [G]world`), the tool will recognize them. You can even apply the punctuation rules inside the brackets to fix the timing (e.g., `[C]Hello [G,]world`).
         
         ### 📝 5. Song Metadata (Important!)
-        Before clicking the **"Convert Text to Lava"** button, remember to fill in the **Song Name**, **Artist**, **BPM**, and **Default Beat** fields at the top of the panel. The tool will use this information to automatically build the mandatory header block for the Lava Genie editor, so you don't have to type it manually later.
+        Before clicking the **"Convert Text to Lava"** button, remember to fill in the **Song Name**, **Artist**, **BPM**, and **Default Beat**. The tool provides the standard options (1, 2, 3, 4, or 6 beats) to match your song's core harmonic rhythm.
         """)
 
     uploaded_text_file = st.file_uploader("Import a text or ChordPro file (.txt, .cho, .chordpro)", type=["txt", "cho", "chordpro"], key="text_file_import")
@@ -498,7 +498,9 @@ with tab_text:
     t_name = col_a.text_input("Song Name", t_name if 't_name' in locals() and not uploaded_text_file else default_name)
     t_artist = col_b.text_input("Artist", t_artist if 't_artist' in locals() and not uploaded_text_file else default_artist)
     t_bpm = col_c.text_input("BPM", t_bpm if 't_bpm' in locals() and not uploaded_text_file else default_bpm)
-    t_def_beat = col_d.number_input("Default Beat", min_value=1, max_value=8, value=4)
+    
+    # AGGIORNATO: Ora include 1 e 2. L'index=3 seleziona il valore '4' come predefinito all'avvio.
+    t_def_beat = col_d.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3)
 
     input_text = st.text_area("Chords & Lyrics Content (Paste or edit imported file):", value=default_text, height=300, placeholder="C           G,\nMy sample lyrics...")
 
