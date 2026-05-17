@@ -429,8 +429,11 @@ with tab_text:
 
         ### 📁 4. ChordPro Import (.cho)
         You can upload standard ChordPro files using the upload button. If your chords are already written inline (e.g., `[C]Hello [G]world`), the tool will recognize them. You can even apply the punctuation rules inside the brackets to fix the timing (e.g., `[C]Hello [G,]world`).
+        
+        ### 📝 5. Song Metadata (Important!)
+        Before clicking the **"Convert Text to Lava"** button, remember to fill in the **Song Name**, **Artist**, **BPM**, and **Default Beat** fields at the top of the panel. The tool will use this information to automatically build the mandatory header block for the Lava Genie editor, so you don't have to type it manually later.
         """)
-
+    
     # 1. AGGIUNTO: Caricatore di file per file di testo/chordpro esistenti
     uploaded_text_file = st.file_uploader("Import a text or ChordPro file (.txt, .cho, .chordpro)", type=["txt", "cho", "chordpro"], key="text_file_import")
     
