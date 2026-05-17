@@ -343,4 +343,182 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
 
     if current_line: final_chart.append(current_line.rstrip())
     if duration_freq: out_default_beat = duration_freq.most_common(1)[0][0]
-    return out_title, out_artist, out_bpm
+    return out_title, out_artist, out_bpm, out_time_sig, out_root_key, out_default_beat, "\n".join(final_chart)
+
+# ==========================================
+# WEB UI (STREAMLIT)
+# ==========================================
+
+st.set_page_config(page_title="Lava Genie Chart Tool", page_icon="🎸", layout="wide")
+
+st.title("🌋 Lava Genie Chart Tool")
+
+tab_xml, tab_text = st.tabs(["🎼 MusicXML Converter", "📝 Text-to-Lava (Quick Markup)"])
+
+# --- TAB 1: MUSICXML ---
+with tab_xml:
+    st.header("Convert MusicXML to Lava+")
+    st.markdown("Upload your `.xml` or `.mxl` files from MuseScore, Finale or Sibelius.")
+    
+    uploaded_files = st.file_uploader("Upload MusicXML", type=["xml", "mxl"], accept_multiple_files=True, key="xml_up")
+    
+    if uploaded_files:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            format_choice = st.radio("Export Format:", [
+                "Lava Genie format (.txt)", 
+                "ChordPro Format (.cho) - For other apps (includes chord duration)"
+            ])
+            
+        is_chordpro = (format_choice != "Lava Genie format (.txt)")
+
+        if len(uploaded_files) == 1:
+            file = uploaded_files[0]
+            try:
+                file_bytes = file.read()
+                title, artist, bpm, time_sig, root_key, def_beat, chart = parse_musicxml(file_bytes, file.name, is_chordpro)
+                st.success(f"Successfully processed: **{title}**")
+                
+                c1, c2, c3, c4 = st.columns(4)
+                title = c1.text_input("Song Name", title)
+                artist = c2.text_input("Artist", artist)
+                bpm = c3.text_input("BPM", bpm)
+                def_beat = c4.text_input("Default Beat", str(def_beat))
+
+                final_output = ""
+                if is_chordpro:
+                    final_output = f"{{title: {title}}}\n{{artist: {artist}}}\n{{tempo: {bpm}}}\n{{time: {time_sig}}}\n{{key: {root_key}}}\n\n{chart}"
+                    ext = ".cho"
+                else:
+                    final_output = f"---\nname: '{title}'\nartist: '{artist}'\nbpm: {bpm}\ntimeSignature: '{time_sig}'\nrootKey: '{root_key}'\nbeat: {def_beat}\n---\n{chart}"
+                    ext = "_LavaGenie.txt"
+
+                st.text_area("Conversion Result:", final_output, height=400)
+                safe_title = re.sub(r'[\\/*?:"<>|]', "", title)
+                st.download_button(label="Download File", data=final_output, file_name=f"{safe_title}{ext}", mime="text/plain")
+                
+            except Exception as e:
+                st.error(f"Error processing {file.name}: {e}")
+
+        else:
+            st.info(f"Batch Mode: {len(uploaded_files)} files ready for conversion.")
+            if st.button("Start Bulk Conversion"):
+                zip_buffer = io.BytesIO()
+                success_count = 0
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for file in uploaded_files:
+                        try:
+                            file_bytes = file.read()
+                            title, artist, bpm, time_sig, root_key, def_beat, chart = parse_musicxml(file_bytes, file.name, is_chordpro)
+                            if is_chordpro:
+                                final_output = f"{{title: {title}}}\n{{artist: {artist}}}\n{{tempo: {bpm}}}\n{{time: {time_sig}}}\n{{key: {root_key}}}\n\n{chart}"
+                                ext = ".cho"
+                            else:
+                                final_output = f"---\nname: '{title}'\nartist: '{artist}'\nbpm: {bpm}\ntimeSignature: '{time_sig}'\nrootKey: '{root_key}'\nbeat: {def_beat}\n---\n{chart}"
+                                ext = "_LavaGenie.txt"
+                            safe_title = re.sub(r'[\\/*?:"<>|]', "", title) or "Unknown"
+                            zf.writestr(f"{safe_title}{ext}", final_output)
+                            success_count += 1
+                        except Exception as e:
+                            st.error(f"Error on {file.name}: {e}")
+                
+                st.success(f"Done! {success_count} files processed.")
+                st.download_button(label="Download ZIP Archive", data=zip_buffer.getvalue(), file_name="Batch_Export.zip", mime="application/zip")
+
+# --- TAB 2: TEXT MARKUP ---
+with tab_text:
+    st.header("Quick Text-to-Lava Converter")
+    
+    with st.expander("❓ Help & Instructions: How to prepare your text file"):
+        st.markdown("""
+        **Welcome to the Quick Text-to-Lava Converter!** This tool lets you take standard chord sheets from the web and convert them into perfectly timed Lava Genie charts, saving you hours of manual editing inside the app.
+
+        ### 🎹 1. Spacing and Alignment
+        The engine uses "spatial math" to place the chords exactly where they belong.
+        * Write your chords using a **monospaced font** (like Notepad, Courier, or Consolas).
+        * Use the **spacebar** (never the TAB key) to position the chord *exactly* above the word or syllable where the change happens.
+
+        ### ⏱️ 2. Setting Chord Durations (The Punctuation Rule)
+        By default, every chord lasts for your "Default Beat" (usually 4). To change a chord's duration, simply attach a basic punctuation mark directly to the chord name (no spaces):
+        * **Chord** (No symbol) = Default Beat (No editing needed!)
+        * **Chord!** (Exclamation) = 6 beats *(Perfect for 6/8 time signatures!)*
+        * **Chord:** (Colon) = 4 beats
+        * **Chord;** (Semicolon) = 3 beats
+        * **Chord,** (Comma) = 2 beats
+        * **Chord.** (Period) = 1 beat
+        
+        > 💡 **PRO TIP FOR ALIGNMENT:** When you add a punctuation mark to a chord, remember to **delete one empty space** immediately after it. This prevents the rest of the chords on that line from shifting one character to the right and losing their perfect alignment with the lyrics!
+        
+        *Example:*
+        ```text
+        C                 G,         F.   C.
+        This is just a sample lyric line
+        ```
+
+        ### 🎸 3. Instrumental Breaks
+        If you write a line of chords with no lyrics underneath (like an intro: `Bm, A, Em`), the tool will automatically format it as an instrumental break. Just make sure to keep chords on one line and lyrics on the next!
+
+        ### 📁 4. ChordPro Import (.cho)
+        You can upload standard ChordPro files using the upload button. If your chords are already written inline (e.g., `[C]Hello [G]world`), the tool will recognize them. You can even apply the punctuation rules inside the brackets to fix the timing (e.g., `[C]Hello [G,]world`).
+        
+        ### 📝 5. Song Metadata (Important!)
+        Before clicking the **"Convert Text to Lava"** button, remember to fill in the **Song Name**, **Artist**, **BPM**, and **Default Beat** fields at the top of the panel. The tool will use this information to automatically build the mandatory header block for the Lava Genie editor, so you don't have to type it manually later.
+        """)
+
+    uploaded_text_file = st.file_uploader("Import a text or ChordPro file (.txt, .cho, .chordpro)", type=["txt", "cho", "chordpro"], key="text_file_import")
+    
+    default_name = "My Song"
+    default_artist = "Unknown"
+    default_bpm = "120"
+    default_text = ""
+    
+    if uploaded_text_file is not None:
+        try:
+            default_text = uploaded_text_file.read().decode("utf-8")
+            filename_clean = uploaded_text_file.name.rsplit('.', 1)[0]
+            if " - " in filename_clean:
+                parts_name = filename_clean.split(" - ", 1)
+                default_artist = parts_name[0].strip()
+                default_name = parts_name[1].strip()
+            else:
+                default_name = filename_clean.strip()
+                
+            title_match = re.search(r'{title:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{t:\s*(.*?)}', default_text, re.IGNORECASE)
+            artist_match = re.search(r'{artist:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{a:\s*(.*?)}', default_text, re.IGNORECASE)
+            tempo_match = re.search(r'{tempo:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{bpm:\s*(.*?)}', default_text, re.IGNORECASE)
+            
+            if title_match: default_name = title_match.group(1).strip()
+            if artist_match: default_artist = artist_match.group(1).strip()
+            if tempo_match: default_bpm = tempo_match.group(1).strip()
+            
+        except Exception as e:
+            st.error(f"Error reading text file: {e}")
+
+    col_a, col_b, col_c, col_d = st.columns(4)
+    t_name = col_a.text_input("Song Name", t_name if 't_name' in locals() and not uploaded_text_file else default_name)
+    t_artist = col_b.text_input("Artist", t_artist if 't_artist' in locals() and not uploaded_text_file else default_artist)
+    t_bpm = col_c.text_input("BPM", t_bpm if 't_bpm' in locals() and not uploaded_text_file else default_bpm)
+    t_def_beat = col_d.number_input("Default Beat", min_value=1, max_value=8, value=4)
+
+    input_text = st.text_area("Chords & Lyrics Content (Paste or edit imported file):", value=default_text, height=300, placeholder="C           G,\nMy sample lyrics...")
+
+    if st.button("Convert Text to Lava"):
+        if input_text.strip():
+            try:
+                converted_chart = convert_text_markup_to_lava(input_text, t_def_beat)
+                final_header = f"---\nname: '{t_name}'\nartist: '{t_artist}'\nbpm: {t_bpm}\nbeat: {t_def_beat}\n---\n"
+                full_output = final_header + converted_chart
+                
+                st.subheader("Result (Copy & Paste into Genie Song Editor):")
+                st.text_area("Final Output:", full_output, height=300)
+                
+                st.download_button(
+                    label="Download converted .txt File",
+                    data=full_output,
+                    file_name=f"{t_name.replace(' ', '_')}_Lava.txt",
+                    mime="text/plain"
+                )
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+        else:
+            st.warning("Please paste or import some text first.")
