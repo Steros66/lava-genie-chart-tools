@@ -429,7 +429,7 @@ with tab_xml:
 with tab_text:
     st.header("Quick Text-to-Lava Converter")
     
-with st.expander("❓ Help & Instructions: How to prepare your text file"):
+    with st.expander("❓ Help & Instructions: How to prepare your text file"):
         st.markdown("""
         **Welcome to the Quick Text-to-Lava Converter!** This tool lets you take standard chord sheets from the web and convert them into perfectly timed Lava Genie charts, saving you time compared to manual editing inside the app.
 
