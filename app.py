@@ -380,10 +380,11 @@ with tab_xml:
                 st.success(f"Successfully processed: **{title}**")
                 
                 c1, c2, c3, c4 = st.columns(4)
-                title = c1.text_input("Song Name", title)
-                artist = c2.text_input("Artist", artist)
-                bpm = c3.text_input("BPM", bpm)
-                def_beat = c4.text_input("Default Beat", str(def_beat))
+                # Aggiunte le key univoche per il Tab XML
+                title = c1.text_input("Song Name", title, key="xml_title")
+                artist = c2.text_input("Artist", artist, key="xml_artist")
+                bpm = c3.text_input("BPM", bpm, key="xml_bpm")
+                def_beat = c4.text_input("Default Beat", str(def_beat), key="xml_def_beat")
 
                 final_output = ""
                 if is_chordpro:
@@ -495,9 +496,11 @@ with tab_text:
             st.error(f"Error reading text file: {e}")
 
     col_a, col_b, col_c, col_d = st.columns(4)
-    t_name = col_a.text_input("Song Name", t_name if 't_name' in locals() and not uploaded_text_file else default_name)
-    t_artist = col_b.text_input("Artist", t_artist if 't_artist' in locals() and not uploaded_text_file else default_artist)
-    t_bpm = col_c.text_input("BPM", t_bpm if 't_bpm' in locals() and not uploaded_text_file else default_bpm)
+    # Aggiunte le key univoche per il Tab Testo
+    t_name = col_a.text_input("Song Name", t_name if 't_name' in locals() and not uploaded_text_file else default_name, key="txt_title")
+    t_artist = col_b.text_input("Artist", t_artist if 't_artist' in locals() and not uploaded_text_file else default_artist, key="txt_artist")
+    t_bpm = col_c.text_input("BPM", t_bpm if 't_bpm' in locals() and not uploaded_text_file else default_bpm, key="txt_bpm")
+    t_def_beat = col_d.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3, key="txt_def_beat")
     
     # AGGIORNATO: Ora include 1 e 2. L'index=3 seleziona il valore '4' come predefinito all'avvio.
     t_def_beat = col_d.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3)
