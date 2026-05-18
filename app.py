@@ -10,7 +10,6 @@ import io
 # ==========================================
 
 def convert_text_markup_to_lava(text_content, default_beat):
-    # Aggiunto il punto esclamativo per i 6 battiti
     duration_symbols = {'!': 6, ':': 4, ';': 3, ',': 2, '.': 1}
     lines = text_content.split('\n')
     output_lines = []
@@ -23,7 +22,6 @@ def convert_text_markup_to_lava(text_content, default_beat):
             i += 1
             continue
             
-        # 1. CONTROLLO CHORDPRO: Se la riga contiene già parentesi quadre, la trattiamo come formato in-line
         if re.search(r'\[(.*?)\]', line):
             def replace_inline_chord(match):
                 chord_text = match.group(1).strip()
@@ -47,7 +45,6 @@ def convert_text_markup_to_lava(text_content, default_beat):
             i += 1
             continue
 
-        # 2. CONTROLLO CLASSICO (Accordi sopra il testo) - Regex aggiornata con "!"
         words = line.split()
         is_chord_line = len(words) > 0 and all(re.match(r'^[A-G][a-zA-Z0-9#b/]*[:;,\.!]?$', w) for w in words)
                 
@@ -58,7 +55,6 @@ def convert_text_markup_to_lava(text_content, default_beat):
             if i + 1 < len(lines):
                 next_line = lines[i+1].rstrip('\r\n')
                 words_next = next_line.split()
-                # Regex aggiornata anche qui con "!"
                 is_next_chord = len(words_next) > 0 and all(re.match(r'^[A-G][a-zA-Z0-9#b/]*[:;,\.!]?$', w) for w in words_next)
                 if next_line.strip() and not is_next_chord and not re.search(r'\[(.*?)\]', next_line):
                     lyric_line = next_line
@@ -233,7 +229,29 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     
     measure_timeline = sorted(list(measure_numbers), key=sort_key)
 
+    # --- CORREZIONE: PRE-CALCOLO DEL DEFAULT BEAT ---
     duration_freq = Counter()
+    for measure_num in measure_timeline:
+        c_measure = chord_part.find(f'measure[@number="{measure_num}"]')
+        chord_count = 0
+        if c_measure is not None:
+            for el in c_measure:
+                if el.tag == 'harmony': 
+                    chord_count += 1
+                elif el.tag == 'direction':
+                    words = el.find('.//words')
+                    if words is not None and words.text:
+                        text = words.text.strip()
+                        if re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?$', text, re.IGNORECASE):
+                            chord_count += 1
+        duration_per_chord = max(1, beats_per_measure // chord_count) if chord_count > 0 else beats_per_measure
+        if chord_count > 0: 
+            duration_freq[duration_per_chord] += chord_count
+    
+    if duration_freq: 
+        out_default_beat = duration_freq.most_common(1)[0][0]
+    # -------------------------------------------------
+
     final_chart = []
     current_line = ""
     target_line_length = 55
@@ -265,13 +283,12 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                                 fake_name.text = chord
                                 elements_to_process.append(fake_harmony)
 
-        if l_measure is not None:
-            for el in l_measure.findall('note'):
-                if el.find('.//lyric') is not None: elements_to_process.append(el)
+            if l_measure is not None:
+                for el in l_measure.findall('note'):
+                    if el.find('.//lyric') is not None: elements_to_process.append(el)
 
         chord_count = sum(1 for el in elements_to_process if el.tag == 'harmony')
         duration_per_chord = max(1, beats_per_measure // chord_count) if chord_count > 0 else beats_per_measure
-        if chord_count > 0: duration_freq[duration_per_chord] += chord_count
 
         last_printed_chord = None
 
@@ -310,39 +327,38 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                         last_printed_chord, last_appended_type = chord_name, "Chord"
                         consecutive_chords += 1
 
-            elif child.tag == 'note':
-                lyric_node = child.find('.//lyric')
-                if lyric_node is not None:
-                    text_node = lyric_node.find('text')
-                    raw_text = text_node.text if text_node is not None else ""
-                    has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
-                    lyric_text = clean_lyric_text(raw_text)
-                    if lyric_text:
-                        if consecutive_chords >= 2 and not line_has_lyrics:
-                            last_space_bracket = current_line.rfind(" [")
-                            if last_space_bracket != -1:
-                                before = current_line[:last_space_bracket].rstrip()
-                                after = current_line[last_space_bracket + 1:]
-                                if before: final_chart.append(before)
-                                current_line, first_consecutive_chord_index = after, 0
-                        current_line += lyric_text
-                        last_appended_type, consecutive_chords, line_has_lyrics = "Lyric", 0, True
-                        syllabic_node = lyric_node.find('syllabic')
-                        syllabic = syllabic_node.text if syllabic_node is not None else ""
-                        if syllabic in ["begin", "middle"] or has_hyphen: is_mid_word = True
-                        else:
-                            current_line += " "
-                            is_mid_word = False
-                            if len(current_line) >= target_line_length:
-                                final_chart.append(current_line.rstrip())
-                                current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
+                elif child.tag == 'note':
+                    lyric_node = child.find('.//lyric')
+                    if lyric_node is not None:
+                        text_node = lyric_node.find('text')
+                        raw_text = text_node.text if text_node is not None else ""
+                        has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
+                        lyric_text = clean_lyric_text(raw_text)
+                        if lyric_text:
+                            if consecutive_chords >= 2 and not line_has_lyrics:
+                                last_space_bracket = current_line.rfind(" [")
+                                if last_space_bracket != -1:
+                                    before = current_line[:last_space_bracket].rstrip()
+                                    after = current_line[last_space_bracket + 1:]
+                                    if before: final_chart.append(before)
+                                    current_line, first_consecutive_chord_index = after, 0
+                            current_line += lyric_text
+                            last_appended_type, consecutive_chords, line_has_lyrics = "Lyric", 0, True
+                            syllabic_node = lyric_node.find('syllabic')
+                            syllabic = syllabic_node.text if syllabic_node is not None else ""
+                            if syllabic in ["begin", "middle"] or has_hyphen: is_mid_word = True
+                            else:
+                                current_line += " "
+                                is_mid_word = False
+                                if len(current_line) >= target_line_length:
+                                    final_chart.append(current_line.rstrip())
+                                    current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
 
-        if not is_mid_word and len(current_line) >= target_line_length:
-            final_chart.append(current_line.rstrip())
-            current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
+            if not is_mid_word and len(current_line) >= target_line_length:
+                final_chart.append(current_line.rstrip())
+                current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
 
     if current_line: final_chart.append(current_line.rstrip())
-    if duration_freq: out_default_beat = duration_freq.most_common(1)[0][0]
     return out_title, out_artist, out_bpm, out_time_sig, out_root_key, out_default_beat, "\n".join(final_chart)
 
 # ==========================================
@@ -380,7 +396,6 @@ with tab_xml:
                 st.success(f"Successfully processed: **{title}**")
                 
                 c1, c2, c3, c4 = st.columns(4)
-                # Aggiunte le key univoche per il Tab XML
                 title = c1.text_input("Song Name", title, key="xml_title")
                 artist = c2.text_input("Artist", artist, key="xml_artist")
                 bpm = c3.text_input("BPM", bpm, key="xml_bpm")
@@ -496,14 +511,10 @@ with tab_text:
             st.error(f"Error reading text file: {e}")
 
     col_a, col_b, col_c, col_d = st.columns(4)
-    # Aggiunte le key univoche per il Tab Testo
-    t_name = col_a.text_input("Song Name", t_name if 't_name' in locals() and not uploaded_text_file else default_name, key="txt_title")
-    t_artist = col_b.text_input("Artist", t_artist if 't_artist' in locals() and not uploaded_text_file else default_artist, key="txt_artist")
-    t_bpm = col_c.text_input("BPM", t_bpm if 't_bpm' in locals() and not uploaded_text_file else default_bpm, key="txt_bpm")
+    t_name = col_a.text_input("Song Name", default_name, key="txt_title")
+    t_artist = col_b.text_input("Artist", default_artist, key="txt_artist")
+    t_bpm = col_c.text_input("BPM", default_bpm, key="txt_bpm")
     t_def_beat = col_d.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3, key="txt_def_beat")
-    
-    # AGGIORNATO: Ora include 1 e 2. L'index=3 seleziona il valore '4' come predefinito all'avvio.
-    t_def_beat = col_d.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3)
 
     input_text = st.text_area("Chords & Lyrics Content (Paste or edit imported file):", value=default_text, height=300, placeholder="C           G,\nMy sample lyrics...")
 
