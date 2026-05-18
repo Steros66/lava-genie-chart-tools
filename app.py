@@ -229,7 +229,7 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     
     measure_timeline = sorted(list(measure_numbers), key=sort_key)
 
-    # --- CORREZIONE: PRE-CALCOLO DEL DEFAULT BEAT ---
+    # --- PRE-CALCOLO DEL DEFAULT BEAT ---
     duration_freq = Counter()
     for measure_num in measure_timeline:
         c_measure = chord_part.find(f'measure[@number="{measure_num}"]')
@@ -283,9 +283,9 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                                 fake_name.text = chord
                                 elements_to_process.append(fake_harmony)
 
-            if l_measure is not None:
-                for el in l_measure.findall('note'):
-                    if el.find('.//lyric') is not None: elements_to_process.append(el)
+        if l_measure is not None:
+            for el in l_measure.findall('note'):
+                if el.find('.//lyric') is not None: elements_to_process.append(el)
 
         chord_count = sum(1 for el in elements_to_process if el.tag == 'harmony')
         duration_per_chord = max(1, beats_per_measure // chord_count) if chord_count > 0 else beats_per_measure
@@ -327,36 +327,36 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                         last_printed_chord, last_appended_type = chord_name, "Chord"
                         consecutive_chords += 1
 
-                elif child.tag == 'note':
-                    lyric_node = child.find('.//lyric')
-                    if lyric_node is not None:
-                        text_node = lyric_node.find('text')
-                        raw_text = text_node.text if text_node is not None else ""
-                        has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
-                        lyric_text = clean_lyric_text(raw_text)
-                        if lyric_text:
-                            if consecutive_chords >= 2 and not line_has_lyrics:
-                                last_space_bracket = current_line.rfind(" [")
-                                if last_space_bracket != -1:
-                                    before = current_line[:last_space_bracket].rstrip()
-                                    after = current_line[last_space_bracket + 1:]
-                                    if before: final_chart.append(before)
-                                    current_line, first_consecutive_chord_index = after, 0
-                            current_line += lyric_text
-                            last_appended_type, consecutive_chords, line_has_lyrics = "Lyric", 0, True
-                            syllabic_node = lyric_node.find('syllabic')
-                            syllabic = syllabic_node.text if syllabic_node is not None else ""
-                            if syllabic in ["begin", "middle"] or has_hyphen: is_mid_word = True
-                            else:
-                                current_line += " "
-                                is_mid_word = False
-                                if len(current_line) >= target_line_length:
-                                    final_chart.append(current_line.rstrip())
-                                    current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
+            elif child.tag == 'note':
+                lyric_node = child.find('.//lyric')
+                if lyric_node is not None:
+                    text_node = lyric_node.find('text')
+                    raw_text = text_node.text if text_node is not None else ""
+                    has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
+                    lyric_text = clean_lyric_text(raw_text)
+                    if lyric_text:
+                        if consecutive_chords >= 2 and not line_has_lyrics:
+                            last_space_bracket = current_line.rfind(" [")
+                            if last_space_bracket != -1:
+                                before = current_line[:last_space_bracket].rstrip()
+                                after = current_line[last_space_bracket + 1:]
+                                if before: final_chart.append(before)
+                                current_line, first_consecutive_chord_index = after, 0
+                        current_line += lyric_text
+                        last_appended_type, consecutive_chords, line_has_lyrics = "Lyric", 0, True
+                        syllabic_node = lyric_node.find('syllabic')
+                        syllabic = syllabic_node.text if syllabic_node is not None else ""
+                        if syllabic in ["begin", "middle"] or has_hyphen: is_mid_word = True
+                        else:
+                            current_line += " "
+                            is_mid_word = False
+                            if len(current_line) >= target_line_length:
+                                final_chart.append(current_line.rstrip())
+                                current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
 
-            if not is_mid_word and len(current_line) >= target_line_length:
-                final_chart.append(current_line.rstrip())
-                current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
+        if not is_mid_word and len(current_line) >= target_line_length:
+            final_chart.append(current_line.rstrip())
+            current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
 
     if current_line: final_chart.append(current_line.rstrip())
     return out_title, out_artist, out_bpm, out_time_sig, out_root_key, out_default_beat, "\n".join(final_chart)
