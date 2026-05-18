@@ -487,7 +487,7 @@ with tab_text:
         You can upload standard ChordPro files using the upload button. If your chords are already written inline (e.g., `[C]Hello [G]world`), the tool will recognize them. You can even apply the punctuation rules inside the brackets to fix the timing (e.g., `[C]Hello [G,]world`).
         
         ### 📝 5. Song Metadata (Important!)
-        Before clicking the **"Convert Text to Lava"** button, remember to fill in the **Song Name**, **Artist**, **BPM**, and **Default Beat**. The tool provides the standard options (1, 2, 3, 4, or 6 beats) to match your song's core harmonic rhythm.
+        Before clicking the **"Convert Text to Lava"** button, remember to fill in the fields like **Song Name**, **Artist**, **BPM**, **Time Signature**, and **Key**. The tool will combine everything into the required header block for Lava Genie.
         """)
 
     uploaded_text_file = st.file_uploader("Import a text or ChordPro file (.txt, .cho, .chordpro)", type=["txt", "cho", "chordpro"], key="text_file_import")
@@ -495,6 +495,8 @@ with tab_text:
     default_name = "My Song"
     default_artist = "Unknown"
     default_bpm = "120"
+    default_time_sig = "4/4"
+    default_key = "C"
     default_text = ""
     
     if uploaded_text_file is not None:
@@ -511,19 +513,28 @@ with tab_text:
             title_match = re.search(r'{title:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{t:\s*(.*?)}', default_text, re.IGNORECASE)
             artist_match = re.search(r'{artist:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{a:\s*(.*?)}', default_text, re.IGNORECASE)
             tempo_match = re.search(r'{tempo:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{bpm:\s*(.*?)}', default_text, re.IGNORECASE)
+            key_match = re.search(r'{key:\s*(.*?)}', default_text, re.IGNORECASE) or re.search(r'{k:\s*(.*?)}', default_text, re.IGNORECASE)
+            time_match = re.search(r'{time:\s*(.*?)}', default_text, re.IGNORECASE)
             
             if title_match: default_name = title_match.group(1).strip()
             if artist_match: default_artist = artist_match.group(1).strip()
             if tempo_match: default_bpm = tempo_match.group(1).strip()
+            if key_match: default_key = key_match.group(1).strip()
+            if time_match: default_time_sig = time_match.group(1).strip()
             
         except Exception as e:
             st.error(f"Error reading text file: {e}")
 
-    col_a, col_b, col_c, col_d = st.columns(4)
-    t_name = col_a.text_input("Song Name", default_name, key="txt_title")
-    t_artist = col_b.text_input("Artist", default_artist, key="txt_artist")
-    t_bpm = col_c.text_input("BPM", default_bpm, key="txt_bpm")
-    t_def_beat = col_d.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3, key="txt_def_beat")
+    # Layout pulito a due righe per evitare il sovraffollamento visivo
+    row1_col1, row1_col2, row1_col3 = st.columns(3)
+    t_name = row1_col1.text_input("Song Name", default_name, key="txt_title")
+    t_artist = row1_col2.text_input("Artist", default_artist, key="txt_artist")
+    t_bpm = row1_col3.text_input("BPM", default_bpm, key="txt_bpm")
+
+    row2_col1, row2_col2, row2_col3 = st.columns(3)
+    t_time_sig = row2_col1.text_input("Time Signature", default_time_sig, key="txt_time_sig")
+    t_key = row2_col2.text_input("Key", default_key, key="txt_key")
+    t_def_beat = row2_col3.selectbox("Default Beat", options=[1, 2, 3, 4, 6], index=3, key="txt_def_beat")
 
     input_text = st.text_area("Chords & Lyrics Content (Paste or edit imported file):", value=default_text, height=300, placeholder="C           G,\nMy sample lyrics...")
 
@@ -531,7 +542,8 @@ with tab_text:
         if input_text.strip():
             try:
                 converted_chart = convert_text_markup_to_lava(input_text, t_def_beat)
-                final_header = f"---\nname: '{t_name}'\nartist: '{t_artist}'\nbpm: {t_bpm}\nbeat: {t_def_beat}\n---\n"
+                # Intestazione speculare a quella del MusicXML, ora con timeSignature
+                final_header = f"---\nname: '{t_name}'\nartist: '{t_artist}'\nbpm: {t_bpm}\ntimeSignature: '{t_time_sig}'\nrootKey: '{t_key}'\nbeat: {t_def_beat}\n---\n"
                 full_output = final_header + converted_chart
                 
                 st.subheader("Result (Copy & Paste into Genie Song Editor):")
