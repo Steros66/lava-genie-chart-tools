@@ -369,6 +369,15 @@ st.set_page_config(page_title="Lava Genie Chart Tool", page_icon="🎸", layout=
 
 st.title("🌋 Lava Genie Chart Tool")
 
+# INSERISCI QUESTO BLOCCO QUI:
+st.markdown("""
+    <style>
+    textarea {
+        font-family: 'Courier New', Courier, monospace !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 tab_xml, tab_text = st.tabs(["🎼 MusicXML Converter", "📝 Text-to-Lava (Quick Markup)"])
 
 # --- TAB 1: MUSICXML ---
