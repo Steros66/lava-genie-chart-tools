@@ -408,7 +408,9 @@ with tab_xml:
                 title = c1.text_input("Song Name", title, key="xml_title")
                 artist = c2.text_input("Artist", artist, key="xml_artist")
                 bpm = c3.text_input("BPM", bpm, key="xml_bpm")
-                def_beat = c4.text_input("Default Beat", str(def_beat), key="xml_def_beat")
+                
+                # MODIFICATO: Aggiunto disabled=True per impedire modifiche dannose
+                def_beat = c4.text_input("Default Beat", str(def_beat), key="xml_def_beat", disabled=True)
 
                 final_output = ""
                 if is_chordpro:
