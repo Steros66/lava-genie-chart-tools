@@ -112,25 +112,25 @@ def format_solfeggio_chord(text):
 
 def get_chord_name(harmony_node):
     fake_name = harmony_node.find('fake-name')
-    if fake_name is not None: return fake_name.text
+    if fake_name is not None and fake_name.text: return fake_name.text.strip()
 
     chord_name_node = harmony_node.find('chord-name')
     kind_node = harmony_node.find('kind')
     
-    explicit_name = chord_name_node.text if chord_name_node is not None else (kind_node.get('text') if kind_node is not None else "")
+    explicit_name = (chord_name_node.text or "") if chord_name_node is not None else (kind_node.get('text') or "" if kind_node is not None else "")
     if explicit_name and re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si)', explicit_name, re.IGNORECASE):
         return format_solfeggio_chord(explicit_name)
 
     root = harmony_node.find('root')
     if root is None: return None
 
-    root_step = root.find('root-step').text if root.find('root-step') is not None else ""
-    root_alter = root.find('root-alter').text if root.find('root-alter') is not None else None
+    root_step = (root.find('root-step').text or "") if root.find('root-step') is not None else ""
+    root_alter = (root.find('root-alter').text or "") if root.find('root-alter') is not None else None
     root_accidental = "b" if root_alter == "-1" else ("#" if root_alter == "1" else "")
     root_note = f"{root_step}{root_accidental}"
 
-    kind = kind_node.text if kind_node is not None else ""
-    kind_text_attr = kind_node.get('text') if kind_node is not None else ""
+    kind = (kind_node.text or "") if kind_node is not None else ""
+    kind_text_attr = kind_node.get('text') or "" if kind_node is not None else ""
     
     suffix = ""
     if kind_text_attr and kind_text_attr.lower() in ["add9", "sus9"]:
@@ -155,8 +155,8 @@ def get_chord_name(harmony_node):
     bass_note = ""
     bass = harmony_node.find('bass')
     if bass is not None:
-        bass_step = bass.find('bass-step').text if bass.find('bass-step') is not None else ""
-        bass_alter = bass.find('bass-alter').text if bass.find('bass-alter') is not None else None
+        bass_step = (bass.find('bass-step').text or "") if bass.find('bass-step') is not None else ""
+        bass_alter = (bass.find('bass-alter').text or "") if bass.find('bass-alter') is not None else None
         bass_accidental = "b" if bass_alter == "-1" else ("#" if bass_alter == "1" else "")
         if bass_step: bass_note = f"/{bass_step}{bass_accidental}"
 
@@ -183,17 +183,17 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     root = ET.fromstring(xml_content)
 
     work_title_node = root.find('.//work-title')
-    work_title = work_title_node.text if work_title_node is not None else ""
+    work_title = (work_title_node.text or "") if work_title_node is not None else ""
     if not work_title:
         title_credit = root.find('.//credit[credit-type="title"]/credit-words')
-        if title_credit is not None: work_title = title_credit.text
+        if title_credit is not None: work_title = (title_credit.text or "")
         if not work_title: 
             first_credit = root.find('.//credit-words')
-            if first_credit is not None: work_title = first_credit.text
+            if first_credit is not None: work_title = (first_credit.text or "")
     if work_title: out_title = work_title.strip().replace("\n", "").replace("\r", "").replace("'", "''")
 
     creator_node = root.find('.//creator[@type="composer"]') or root.find('.//creator[@type="lyricist"]')
-    creator = creator_node.text if creator_node is not None else ""
+    creator = (creator_node.text or "") if creator_node is not None else ""
     if not creator:
         credits = [c.text.strip() for c in root.findall('.//credit-words') if c.text and c.text.strip()]
         if len(credits) > 1: creator = credits[1]
@@ -331,7 +331,8 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                 lyric_node = child.find('.//lyric')
                 if lyric_node is not None:
                     text_node = lyric_node.find('text')
-                    raw_text = text_node.text if text_node is not None else ""
+                    # LA FIX CRITICA E' QUI SOTTO
+                    raw_text = (text_node.text or "") if text_node is not None else ""
                     has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
                     lyric_text = clean_lyric_text(raw_text)
                     if lyric_text:
@@ -345,7 +346,7 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                         current_line += lyric_text
                         last_appended_type, consecutive_chords, line_has_lyrics = "Lyric", 0, True
                         syllabic_node = lyric_node.find('syllabic')
-                        syllabic = syllabic_node.text if syllabic_node is not None else ""
+                        syllabic = (syllabic_node.text or "") if syllabic_node is not None else ""
                         if syllabic in ["begin", "middle"] or has_hyphen: is_mid_word = True
                         else:
                             current_line += " "
@@ -369,7 +370,6 @@ st.set_page_config(page_title="Lava Genie Chart Tool", page_icon="🎸", layout=
 
 st.title("🌋 Lava Genie Chart Tool")
 
-# INSERISCI QUESTO BLOCCO QUI:
 st.markdown("""
     <style>
     textarea {
@@ -525,7 +525,6 @@ with tab_text:
         except Exception as e:
             st.error(f"Error reading text file: {e}")
 
-    # Layout pulito a due righe per evitare il sovraffollamento visivo
     row1_col1, row1_col2, row1_col3 = st.columns(3)
     t_name = row1_col1.text_input("Song Name", default_name, key="txt_title")
     t_artist = row1_col2.text_input("Artist", default_artist, key="txt_artist")
@@ -542,7 +541,6 @@ with tab_text:
         if input_text.strip():
             try:
                 converted_chart = convert_text_markup_to_lava(input_text, t_def_beat)
-                # Intestazione speculare a quella del MusicXML, ora con timeSignature
                 final_header = f"---\nname: '{t_name}'\nartist: '{t_artist}'\nbpm: {t_bpm}\ntimeSignature: '{t_time_sig}'\nrootKey: '{t_key}'\nbeat: {t_def_beat}\n---\n"
                 full_output = final_header + converted_chart
                 
