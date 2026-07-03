@@ -218,21 +218,14 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     chord_part = max(parts, key=lambda p: len(p.findall('.//harmony')), default=parts[0])
     lyric_part = max(parts, key=lambda p: len(p.findall('.//lyric')), default=parts[0])
 
-    measure_numbers = set()
-    for m in root.findall('.//measure'):
-        num = m.get('number')
-        if num: measure_numbers.add(num)
-    
-    def sort_key(n):
-        digits = ''.join(c for c in n if c.isdigit())
-        return int(digits) if digits else float('inf')
-    
-    measure_timeline = sorted(list(measure_numbers), key=sort_key)
+    c_measures = chord_part.findall('measure')
+    l_measures = lyric_part.findall('measure')
+    max_measures = max(len(c_measures), len(l_measures))
 
-    # --- PRE-CALCOLO DEL DEFAULT BEAT ---
+    # Calcolo del Default Beat
     duration_freq = Counter()
-    for measure_num in measure_timeline:
-        c_measure = chord_part.find(f'measure[@number="{measure_num}"]')
+    for i in range(max_measures):
+        c_measure = c_measures[i] if i < len(c_measures) else None
         chord_count = 0
         if c_measure is not None:
             for el in c_measure:
@@ -250,26 +243,22 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     
     if duration_freq: 
         out_default_beat = duration_freq.most_common(1)[0][0]
-    # -------------------------------------------------
 
-    final_chart = []
-    current_line = ""
-    target_line_length = 55
-    is_mid_word = False
-    consecutive_chords = 0
-    line_has_lyrics = False
-    global_active_chord = None
-    last_appended_type = ""
-    first_consecutive_chord_index = -1
-
-    for measure_num in measure_timeline:
-        c_measure = chord_part.find(f'measure[@number="{measure_num}"]')
-        l_measure = lyric_part.find(f'measure[@number="{measure_num}"]')
-        elements_to_process = []
+    # ESTREZIONE LINEARE DEGLI EVENTI
+    events = []
+    last_added_chord = None
+    
+    for i in range(max_measures):
+        c_measure = c_measures[i] if i < len(c_measures) else None
+        l_measure = l_measures[i] if i < len(l_measures) else None
         
+        temp_chords = []
         if c_measure is not None:
             for el in c_measure:
-                if el.tag == 'harmony': elements_to_process.append(el)
+                if el.tag == 'harmony':
+                    chord_name = get_chord_name(el)
+                    if chord_name:
+                        temp_chords.append(chord_name)
                 elif el.tag == 'direction':
                     words = el.find('.//words')
                     if words is not None and words.text:
@@ -277,89 +266,82 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                         if re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?$', text, re.IGNORECASE):
                             chord = format_solfeggio_chord(text)
                             if chord:
-                                chord = chord[0].upper() + chord[1:]
-                                fake_harmony = ET.Element('harmony')
-                                fake_name = ET.SubElement(fake_harmony, 'fake-name')
-                                fake_name.text = chord
-                                elements_to_process.append(fake_harmony)
+                                temp_chords.append(chord[0].upper() + chord[1:])
+        
+        duration_per_chord = max(1, beats_per_measure // len(temp_chords)) if temp_chords else beats_per_measure
+        
+        # Mantiene in memoria l'ultimo accordo se la battuta è vuota
+        if not temp_chords and last_added_chord:
+            events.append({"type": "chord", "text": last_added_chord, "duration": duration_per_chord})
+        else:
+            for chord in temp_chords:
+                events.append({"type": "chord", "text": chord, "duration": duration_per_chord})
+                last_added_chord = chord
 
         if l_measure is not None:
             for el in l_measure.findall('note'):
-                if el.find('.//lyric') is not None: elements_to_process.append(el)
-
-        chord_count = sum(1 for el in elements_to_process if el.tag == 'harmony')
-        duration_per_chord = max(1, beats_per_measure // chord_count) if chord_count > 0 else beats_per_measure
-
-        last_printed_chord = None
-
-        if chord_count == 0 and global_active_chord:
-            chord_str = f"[{global_active_chord}:{duration_per_chord}]" if is_chordpro else f"[{global_active_chord}]" + (f"<beat:{duration_per_chord}>" if duration_per_chord != out_default_beat else "")
-            if last_appended_type != "Chord": first_consecutive_chord_index = len(current_line)
-            else:
-                if consecutive_chords == 1 and line_has_lyrics and not is_mid_word:
-                    before = current_line[:first_consecutive_chord_index].rstrip()
-                    after = current_line[first_consecutive_chord_index:].lstrip()
-                    if before: final_chart.append(before)
-                    current_line = after
-                    line_has_lyrics, first_consecutive_chord_index = False, 0
-                current_line += " "
-            current_line += chord_str
-            last_printed_chord, last_appended_type = global_active_chord, "Chord"
-            consecutive_chords += 1
-
-        for child in elements_to_process:
-            if child.tag == 'harmony':
-                chord_name = get_chord_name(child)
-                if chord_name:
-                    global_active_chord = chord_name
-                    if chord_name != last_printed_chord:
-                        chord_str = f"[{chord_name}:{duration_per_chord}]" if is_chordpro else f"[{chord_name}]" + (f"<beat:{duration_per_chord}>" if duration_per_chord != out_default_beat else "")
-                        if last_appended_type != "Chord": first_consecutive_chord_index = len(current_line)
-                        else:
-                            if consecutive_chords == 1 and line_has_lyrics and not is_mid_word:
-                                before = current_line[:first_consecutive_chord_index].rstrip()
-                                after = current_line[first_consecutive_chord_index:].lstrip()
-                                if before: final_chart.append(before)
-                                current_line = after
-                                line_has_lyrics, first_consecutive_chord_index = False, 0
-                            current_line += " "
-                        current_line += chord_str
-                        last_printed_chord, last_appended_type = chord_name, "Chord"
-                        consecutive_chords += 1
-
-            elif child.tag == 'note':
-                lyric_node = child.find('.//lyric')
-                if lyric_node is not None:
-                    text_node = lyric_node.find('text')
-                    # LA FIX CRITICA E' QUI SOTTO
-                    raw_text = (text_node.text or "") if text_node is not None else ""
-                    has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
-                    lyric_text = clean_lyric_text(raw_text)
-                    if lyric_text:
-                        if consecutive_chords >= 2 and not line_has_lyrics:
-                            last_space_bracket = current_line.rfind(" [")
-                            if last_space_bracket != -1:
-                                before = current_line[:last_space_bracket].rstrip()
-                                after = current_line[last_space_bracket + 1:]
-                                if before: final_chart.append(before)
-                                current_line, first_consecutive_chord_index = after, 0
-                        current_line += lyric_text
-                        last_appended_type, consecutive_chords, line_has_lyrics = "Lyric", 0, True
+                lyric_nodes = el.findall('.//lyric')
+                for lyric_node in lyric_nodes:
+                    text_nd = lyric_node.find('text')
+                    if text_nd is not None and text_nd.text and text_nd.text.strip():
+                        raw_text = text_nd.text
+                        has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
+                        lyric_text = clean_lyric_text(raw_text)
+                        
                         syllabic_node = lyric_node.find('syllabic')
                         syllabic = (syllabic_node.text or "") if syllabic_node is not None else ""
-                        if syllabic in ["begin", "middle"] or has_hyphen: is_mid_word = True
-                        else:
-                            current_line += " "
-                            is_mid_word = False
-                            if len(current_line) >= target_line_length:
-                                final_chart.append(current_line.rstrip())
-                                current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
+                        is_mid_word = syllabic in ["begin", "middle"] or has_hyphen
+                        
+                        if lyric_text:
+                            events.append({"type": "lyric", "text": lyric_text, "is_mid_word": is_mid_word})
 
-        if not is_mid_word and len(current_line) >= target_line_length:
-            final_chart.append(current_line.rstrip())
-            current_line, consecutive_chords, last_appended_type, line_has_lyrics = "", 0, "", False
-
-    if current_line: final_chart.append(current_line.rstrip())
+    # FORMATTAZIONE TESTUALE LAVA GENIE (Buffer Intelligente)
+    final_chart = []
+    current_line = ""
+    target_line_length = 65
+    consecutive_chords = 0
+    
+    for ev in events:
+        if ev["type"] == "chord":
+            if is_chordpro:
+                chord_str = f"[{ev['text']}:{ev['duration']}]"
+            else:
+                chord_str = f"[{ev['text']}]"
+                if ev['duration'] != out_default_beat:
+                    chord_str += f"<beat:{ev['duration']}>"
+            
+            # Assicura uno spazio prima del nuovo accordo, a meno che non ci sia già
+            if current_line and not current_line.endswith(" "):
+                current_line += " "
+            current_line += chord_str
+            consecutive_chords += 1
+            
+            # Va a capo solo per lunghi intermezzi strumentali (es. intro)
+            if consecutive_chords >= 6 and len(current_line) >= target_line_length:
+                 final_chart.append(current_line.strip())
+                 current_line = ""
+                 consecutive_chords = 0
+                 
+        elif ev["type"] == "lyric":
+            consecutive_chords = 0
+            
+            # "Incolla" l'accordo alla parola rimuovendo spazi superflui
+            if current_line and not (current_line.endswith("]") or current_line.endswith(">")):
+                if not current_line.endswith(" "):
+                    current_line += " "
+            
+            current_line += ev["text"]
+            if not ev["is_mid_word"]:
+                current_line += " "
+                
+            # Va a capo solo a fine parola e se ha superato la lunghezza bersaglio
+            if not ev["is_mid_word"] and len(current_line) >= target_line_length:
+                final_chart.append(current_line.strip())
+                current_line = ""
+                
+    if current_line.strip():
+        final_chart.append(current_line.strip())
+        
     return out_title, out_artist, out_bpm, out_time_sig, out_root_key, out_default_beat, "\n".join(final_chart)
 
 # ==========================================
