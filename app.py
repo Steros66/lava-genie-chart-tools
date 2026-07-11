@@ -244,7 +244,7 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     if duration_freq: 
         out_default_beat = duration_freq.most_common(1)[0][0]
 
-    # ESTREZIONE LINEARE DEGLI EVENTI
+    # ESTRAZIONE ORDINATA DEGLI EVENTI
     events = []
     last_added_chord = None
     
@@ -252,13 +252,33 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
         c_measure = c_measures[i] if i < len(c_measures) else None
         l_measure = l_measures[i] if i < len(l_measures) else None
         
-        temp_chords = []
+        # Ricalcola la durata per questa specifica battuta
+        temp_chords_count = 0
         if c_measure is not None:
+            for el in c_measure:
+                if el.tag == 'harmony': 
+                    temp_chords_count += 1
+                elif el.tag == 'direction':
+                    words = el.find('.//words')
+                    if words is not None and words.text and re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?$', words.text.strip(), re.IGNORECASE):
+                        temp_chords_count += 1
+                        
+        duration_per_chord = max(1, beats_per_measure // temp_chords_count) if temp_chords_count > 0 else beats_per_measure
+
+        if chord_part == lyric_part and c_measure is not None:
+            # 1. TRACCE UNIFICATE (La normalità): Rispetta l'ordine originale dell'XML
+            
+            # Se la battuta è vuota di accordi, trascina l'ultimo accordo noto per mantenere il beat
+            if temp_chords_count == 0 and last_added_chord:
+                events.append({"type": "chord", "text": last_added_chord, "duration": duration_per_chord})
+            
             for el in c_measure:
                 if el.tag == 'harmony':
                     chord_name = get_chord_name(el)
                     if chord_name:
-                        temp_chords.append(chord_name)
+                        events.append({"type": "chord", "text": chord_name, "duration": duration_per_chord})
+                        last_added_chord = chord_name
+                        
                 elif el.tag == 'direction':
                     words = el.find('.//words')
                     if words is not None and words.text:
@@ -266,36 +286,66 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                         if re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?$', text, re.IGNORECASE):
                             chord = format_solfeggio_chord(text)
                             if chord:
-                                temp_chords.append(chord[0].upper() + chord[1:])
-        
-        duration_per_chord = max(1, beats_per_measure // len(temp_chords)) if temp_chords else beats_per_measure
-        
-        # Mantiene in memoria l'ultimo accordo se la battuta è vuota
-        if not temp_chords and last_added_chord:
-            events.append({"type": "chord", "text": last_added_chord, "duration": duration_per_chord})
+                                c_name = chord[0].upper() + chord[1:]
+                                events.append({"type": "chord", "text": c_name, "duration": duration_per_chord})
+                                last_added_chord = c_name
+                                
+                elif el.tag == 'note':
+                    lyric_nodes = el.findall('.//lyric')
+                    for lyric_node in lyric_nodes:
+                        text_nd = lyric_node.find('text')
+                        if text_nd is not None and text_nd.text and text_nd.text.strip():
+                            raw_text = text_nd.text
+                            has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
+                            lyric_text = clean_lyric_text(raw_text)
+                            
+                            syllabic_node = lyric_node.find('syllabic')
+                            syllabic = (syllabic_node.text or "") if syllabic_node is not None else ""
+                            is_mid_word = syllabic in ["begin", "middle"] or has_hyphen
+                            
+                            if lyric_text:
+                                events.append({"type": "lyric", "text": lyric_text, "is_mid_word": is_mid_word})
         else:
-            for chord in temp_chords:
-                events.append({"type": "chord", "text": chord, "duration": duration_per_chord})
-                last_added_chord = chord
+            # 2. FALLBACK TRACCE SEPARATE: Fallback sequenziale
+            if temp_chords_count == 0 and last_added_chord:
+                events.append({"type": "chord", "text": last_added_chord, "duration": duration_per_chord})
+                
+            if c_measure is not None:
+                for el in c_measure:
+                    if el.tag == 'harmony':
+                        chord_name = get_chord_name(el)
+                        if chord_name:
+                            events.append({"type": "chord", "text": chord_name, "duration": duration_per_chord})
+                            last_added_chord = chord_name
+                    elif el.tag == 'direction':
+                        words = el.find('.//words')
+                        if words is not None and words.text:
+                            text = words.text.strip()
+                            if re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?$', text, re.IGNORECASE):
+                                chord = format_solfeggio_chord(text)
+                                if chord:
+                                    c_name = chord[0].upper() + chord[1:]
+                                    events.append({"type": "chord", "text": c_name, "duration": duration_per_chord})
+                                    last_added_chord = c_name
+            
+            if l_measure is not None:
+                for el in l_measure.findall('note'):
+                    lyric_nodes = el.findall('.//lyric')
+                    for lyric_node in lyric_nodes:
+                        text_nd = lyric_node.find('text')
+                        if text_nd is not None and text_nd.text and text_nd.text.strip():
+                            raw_text = text_nd.text
+                            has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
+                            lyric_text = clean_lyric_text(raw_text)
+                            
+                            syllabic_node = lyric_node.find('syllabic')
+                            syllabic = (syllabic_node.text or "") if syllabic_node is not None else ""
+                            is_mid_word = syllabic in ["begin", "middle"] or has_hyphen
+                            
+                            if lyric_text:
+                                events.append({"type": "lyric", "text": lyric_text, "is_mid_word": is_mid_word})
 
-        if l_measure is not None:
-            for el in l_measure.findall('note'):
-                lyric_nodes = el.findall('.//lyric')
-                for lyric_node in lyric_nodes:
-                    text_nd = lyric_node.find('text')
-                    if text_nd is not None and text_nd.text and text_nd.text.strip():
-                        raw_text = text_nd.text
-                        has_hyphen = raw_text.strip().endswith('-') or raw_text.strip().endswith('_')
-                        lyric_text = clean_lyric_text(raw_text)
-                        
-                        syllabic_node = lyric_node.find('syllabic')
-                        syllabic = (syllabic_node.text or "") if syllabic_node is not None else ""
-                        is_mid_word = syllabic in ["begin", "middle"] or has_hyphen
-                        
-                        if lyric_text:
-                            events.append({"type": "lyric", "text": lyric_text, "is_mid_word": is_mid_word})
-
-    # FORMATTAZIONE TESTUALE LAVA GENIE (Buffer Intelligente)
+    # FORMATTAZIONE TESTUALE
     final_chart = []
     current_line = ""
     target_line_length = 65
@@ -310,13 +360,11 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                 if ev['duration'] != out_default_beat:
                     chord_str += f"<beat:{ev['duration']}>"
             
-            # Assicura uno spazio prima del nuovo accordo, a meno che non ci sia già
             if current_line and not current_line.endswith(" "):
                 current_line += " "
             current_line += chord_str
             consecutive_chords += 1
             
-            # Va a capo solo per lunghi intermezzi strumentali (es. intro)
             if consecutive_chords >= 6 and len(current_line) >= target_line_length:
                  final_chart.append(current_line.strip())
                  current_line = ""
@@ -325,7 +373,6 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
         elif ev["type"] == "lyric":
             consecutive_chords = 0
             
-            # "Incolla" l'accordo alla parola rimuovendo spazi superflui
             if current_line and not (current_line.endswith("]") or current_line.endswith(">")):
                 if not current_line.endswith(" "):
                     current_line += " "
@@ -334,7 +381,6 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
             if not ev["is_mid_word"]:
                 current_line += " "
                 
-            # Va a capo solo a fine parola e se ha superato la lunghezza bersaglio
             if not ev["is_mid_word"] and len(current_line) >= target_line_length:
                 final_chart.append(current_line.strip())
                 current_line = ""
