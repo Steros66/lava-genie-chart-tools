@@ -379,10 +379,10 @@ def lava_to_chordpro(lava_text):
     output_lines = []
     default_beat = 4 # Fallback
     
-    # 1. Estrai l'intestazione YAML per trovare il beat di default
+    # 1. Estrai l'intestazione YAML per trovare il beat di default e tradurre in ChordPro
     in_header = False
-    header_content = []
     body_lines = []
+    chordpro_directives = []
     
     for line in lines:
         if line.strip() == "---":
@@ -393,21 +393,37 @@ def lava_to_chordpro(lava_text):
             else:
                 body_lines.append(line)
         elif in_header:
-            header_content.append(line)
-            # Cerca il beat
-            if line.startswith("beat:"):
-                try:
-                    default_beat = int(line.split(":")[1].strip())
-                except:
-                    pass
-            output_lines.append(line)
+            # Dividi la chiave dal valore (es. "name: 'Canzone'")
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                key = parts[0].strip()
+                # Rimuovi spazi e apici (sia singoli che doppi) dal valore
+                val = parts[1].strip().strip("'").strip('"')
+                
+                # Mappatura Lava Genie -> ChordPro standard
+                if key == "name":
+                    chordpro_directives.append(f"{{title: {val}}}")
+                elif key == "artist":
+                    chordpro_directives.append(f"{{artist: {val}}}")
+                elif key == "bpm":
+                    chordpro_directives.append(f"{{tempo: {val}}}")
+                elif key == "timeSignature":
+                    chordpro_directives.append(f"{{time: {val}}}")
+                elif key == "rootKey":
+                    chordpro_directives.append(f"{{key: {val}}}")
+                elif key == "beat":
+                    try:
+                        default_beat = int(val)
+                    except ValueError:
+                        pass
+                    # Il beat viene salvato per la logica ma intenzionalmente NON scritto in output
         else:
             body_lines.append(line)
             
-    # Se abbiamo un header, rimettiamo i trattini
-    if header_content:
-        output_lines.insert(0, "---")
-        output_lines.append("---")
+    # Stampa le direttive all'inizio del file
+    if chordpro_directives:
+        output_lines.extend(chordpro_directives)
+        output_lines.append("") # Riga vuota di separazione tra header e corpo
         
     # 2. Elabora il corpo del testo
     # Regex per trovare: [Accordo] oppure [Accordo]<beat:X>
@@ -419,7 +435,7 @@ def lava_to_chordpro(lava_text):
             continue
             
         new_line = line
-        # Rimpiazza ogni occorrenza usando una funzione
+        # Rimpiazza ogni occorrenza usando la funzione replacer
         def replacer(match):
             chord = match.group(1)
             beat = int(match.group(2)) if match.group(2) else default_beat
