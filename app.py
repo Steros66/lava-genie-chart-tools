@@ -525,6 +525,25 @@ with tab3:
             cp_result = lava_to_chordpro(lava_text)
             st.success("Conversion successful!")
             st.text_area("ChordPro Result:", value=cp_result, height=250)
-            st.download_button("📥 Download ChordPro", cp_result, file_name="chordpro_chart.txt")
+            
+            # --- LOGICA PER IL NOME DEL FILE DINAMICO ---
+            # Cerca il titolo dentro le direttive ChordPro generate
+            title_match = re.search(r'\{title:\s*(.*?)\}', cp_result, re.IGNORECASE)
+            
+            if title_match and title_match.group(1).strip():
+                # Pulisce il titolo da caratteri illegali per i nomi dei file e sostituisce gli spazi con underscore
+                raw_title = title_match.group(1).strip()
+                safe_title = re.sub(r'[\\/*?:"<>|]', "", raw_title).replace(" ", "_")
+            else:
+                safe_title = "Unknown_Song"
+                
+            download_filename = f"{safe_title}_chordpro.txt"
+            
+            st.download_button(
+                label="📥 Download ChordPro", 
+                data=cp_result, 
+                file_name=download_filename,
+                mime="text/plain"
+            )
         else:
             st.warning("Please paste some Lava Genie text first.")
