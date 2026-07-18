@@ -314,63 +314,6 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
     return out_title, out_artist, out_bpm, out_time_sig, out_root_key, out_default_beat, "\n".join(final_chart)
 
 # ==========================================
-# PARSER TEXT-TO-LAVA (Testo -> Testo)
-# ==========================================
-
-def is_chord_line(line):
-    cleaned = line.strip()
-    if not cleaned: return False
-    tokens = cleaned.split()
-    chord_pattern = re.compile(r'^\[?(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?\]?$', re.IGNORECASE)
-    match_count = sum(1 for t in tokens if chord_pattern.match(t))
-    return match_count > 0 and (match_count / len(tokens)) > 0.5
-
-def format_chord(chord_text):
-    c = chord_text.replace('[', '').replace(']', '').strip()
-    return f"[{c}]"
-
-def text_to_lava(text):
-    lines = text.split('\n')
-    output = []
-    i = 0
-    while i < len(lines):
-        line = lines[i].rstrip()
-        if not line:
-            i += 1
-            continue
-        
-        if is_chord_line(line):
-            chords = []
-            for match in re.finditer(r'\S+', line):
-                chords.append((match.group(), match.start()))
-            
-            if i + 1 < len(lines) and not is_chord_line(lines[i+1]) and lines[i+1].strip():
-                lyrics_line = lines[i+1].rstrip()
-                merged_line = ""
-                last_idx = 0
-                
-                for chord, pos in chords:
-                    if pos > len(lyrics_line):
-                        merged_line += lyrics_line[last_idx:] + " " * (pos - len(lyrics_line)) + format_chord(chord)
-                        last_idx = len(lyrics_line)
-                    else:
-                        merged_line += lyrics_line[last_idx:pos] + format_chord(chord)
-                        last_idx = pos
-                
-                merged_line += lyrics_line[last_idx:]
-                output.append(merged_line)
-                i += 2 
-            else:
-                chord_only_line = " ".join([format_chord(c) for c, _ in chords])
-                output.append(chord_only_line)
-                i += 1
-        else:
-            output.append(line)
-            i += 1
-            
-    return "\n".join(output)
-
-# ==========================================
 # PARSER LAVA-TO-CHORDPRO (Testo -> Testo)
 # ==========================================
 
@@ -393,11 +336,10 @@ def lava_to_chordpro(lava_text):
             else:
                 body_lines.append(line)
         elif in_header:
-            # Dividi la chiave dal valore (es. "name: 'Canzone'")
+            # Dividi la chiave dal valore
             parts = line.split(":", 1)
             if len(parts) == 2:
                 key = parts[0].strip()
-                # Rimuovi spazi e apici (sia singoli che doppi) dal valore
                 val = parts[1].strip().strip("'").strip('"')
                 
                 # Mappatura Lava Genie -> ChordPro standard
@@ -406,17 +348,22 @@ def lava_to_chordpro(lava_text):
                 elif key == "artist":
                     chordpro_directives.append(f"{{artist: {val}}}")
                 elif key == "bpm":
-                    chordpro_directives.append(f"{{tempo: {val}}}")
+                    try:
+                        # Converte '65.0' -> 65.0 -> 65 (Rimuove i decimali)
+                        clean_bpm = int(float(val))
+                        chordpro_directives.append(f"{{tempo: {clean_bpm}}}")
+                    except ValueError:
+                        chordpro_directives.append(f"{{tempo: {val}}}")
                 elif key == "timeSignature":
                     chordpro_directives.append(f"{{time: {val}}}")
                 elif key == "rootKey":
                     chordpro_directives.append(f"{{key: {val}}}")
                 elif key == "beat":
                     try:
-                        default_beat = int(val)
+                        # Converte '6.0' -> 6.0 -> 6
+                        default_beat = int(float(val))
                     except ValueError:
                         pass
-                    # Il beat viene salvato per la logica ma intenzionalmente NON scritto in output
         else:
             body_lines.append(line)
             
@@ -426,8 +373,8 @@ def lava_to_chordpro(lava_text):
         output_lines.append("") # Riga vuota di separazione tra header e corpo
         
     # 2. Elabora il corpo del testo
-    # Regex per trovare: [Accordo] oppure [Accordo]<beat:X>
-    pattern = re.compile(r'\[(.*?)\](?:<beat:(\d+)>)?')
+    # Supporta spazi opzionali (\s*) e decimali ([\d\.]+) dentro il tag beat, es: <beat: 3> o <beat:3.0>
+    pattern = re.compile(r'\[(.*?)\](?:<beat:\s*([\d\.]+)>)?')
     
     for line in body_lines:
         if not line.strip():
@@ -435,10 +382,14 @@ def lava_to_chordpro(lava_text):
             continue
             
         new_line = line
-        # Rimpiazza ogni occorrenza usando la funzione replacer
+        # Rimpiazza ogni occorrenza
         def replacer(match):
             chord = match.group(1)
-            beat = int(match.group(2)) if match.group(2) else default_beat
+            if match.group(2):
+                # Converte eventuali decimali in interi (es: ' 3.0' -> 3)
+                beat = int(float(match.group(2)))
+            else:
+                beat = default_beat
             return f"[{chord}:{beat}]"
             
         new_line = pattern.sub(replacer, new_line)
