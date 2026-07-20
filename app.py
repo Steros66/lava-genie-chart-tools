@@ -149,12 +149,21 @@ def parse_musicxml(file_bytes, filename, is_chordpro):
                         text = words.text.strip()
                         if re.match(r'^(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?(m|min|maj|dim|aug|sus|M)?\d*(\/(Do|Re|Mi|Fa|Sol|La|Si|C|D|E|F|G|A|B)[#b]?)?$', text, re.IGNORECASE):
                             chord_count += 1
+# ... codice precedente del ciclo for per il conteggio ...
         duration_per_chord = max(1, beats_per_measure // chord_count) if chord_count > 0 else beats_per_measure
         if chord_count > 0: 
             duration_freq[duration_per_chord] += chord_count
     
     if duration_freq: 
-        out_default_beat = duration_freq.most_common(1)[0][0]
+        # NUOVA LOGICA: Filtra solo le durate >= 2
+        valid_durations = {k: v for k, v in duration_freq.items() if k >= 2}
+        
+        if valid_durations:
+            # Prende la durata più frequente tra quelle valide
+            out_default_beat = max(valid_durations, key=valid_durations.get)
+        else:
+            # Fallback di sicurezza: se per assurdo la canzone ha SOLO accordi da 1 beat
+            out_default_beat = duration_freq.most_common(1)[0][0]
 
     # ESTRAZIONE ORDINATA DEGLI EVENTI
     events = []
